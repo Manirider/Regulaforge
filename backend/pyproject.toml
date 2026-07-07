@@ -1,0 +1,202 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "regulaforge"
+version = "0.1.0"
+description = "Enterprise AI Compliance Platform"
+readme = "../README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [
+    { name = "RegulaForge Engineering", email = "engineering@regulaforge.io" },
+]
+keywords = ["compliance", "regulation", "ai", "enterprise", "governance"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "aiofiles>=23.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.25.0",
+    "sqlalchemy>=2.0.25",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "redis>=5.0.0",
+    "openai>=1.6.0",
+    "python-json-logger>=2.0.0",
+    "httpx>=0.26.0",
+    "aio-pika>=9.3.0",
+    "prometheus-client>=0.19.0",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-instrumentation-fastapi>=0.43b0",
+    "python-multipart>=0.0.6",
+    "cryptography>=42.0.0",
+    "pyjwt>=2.8.0",
+    "bcrypt>=4.1.0",
+    "boto3>=1.34.0",
+    "sentry-sdk>=1.40.0",
+    "langgraph>=1.2.7",
+    "langchain-core>=1.4.8",
+    "scikit-learn>=1.4.0",
+    "pandas>=2.1.0",
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "imbalanced-learn>=0.12.0",
+    "neo4j>=5.14.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    "xgboost>=2.0.0",
+    "catboost>=1.2.0",
+    "lightgbm>=4.1.0",
+    "optuna>=3.5.0",
+    "shap>=0.44.0",
+    "lime>=0.2.0",
+    "mlflow>=2.9.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "mypy>=1.8.0",
+    "ruff>=0.1.0",
+    "black>=24.0.0",
+    "pre-commit>=3.6.0",
+    "factory-boy>=3.3.0",
+    "faker>=22.0.0",
+    "aiosqlite>=0.19.0",
+    "respx>=0.20.0",
+    "aiohttp>=3.14.1",
+    "beautifulsoup4>=4.15.0",
+]
+all = [
+    "regulaforge[ml,dev]",
+]
+
+[project.urls]
+Homepage = "https://regulaforge.io"
+Repository = "https://github.com/regulaforge/regulaforge"
+
+[project.scripts]
+regulaforge = "regulaforge.main:main"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_tests.py"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+    "slow: Slow tests",
+]
+
+[tool.coverage.run]
+source = ["regulaforge"]
+omit = ["*/tests/*", "*/migrations/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_decorators = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+[[tool.mypy.overrides]]
+module = [
+    "alembic.*",
+    "mlflow.*",
+    "sqlalchemy.*",
+    "pydantic.*",
+    "celery.*",
+    "redis.*",
+    "aio_pika.*",
+    "prometheus_client.*",
+    "sentry_sdk.*",
+]
+ignore_missing_imports = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "ARG",  # flake8-unused-arguments
+    "C4",   # flake8-comprehensions
+    "T20",  # flake8-print
+    "PT",   # flake8-pytest-style
+    "RUF",  # ruff-specific rules
+    "ANN",  # flake8-annotations
+    "PL",   # pylint
+    "PIE",  # flake8-pie
+    "RET",  # flake8-return
+    "RSE",  # flake8-raise
+    "SLF",  # flake8-self
+    "YTT",  # flake8-2020
+    "ISC",  # flake8-implicit-str-concat
+    "DTZ",  # flake8-datetimez
+]
+ignore = [
+    "ANN101",  # missing-type-self
+    "ANN102",  # missing-type-cls
+    "ANN401",  # dynamically-typed-expression
+    "B904",    # raise-without-from-inside-except
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+    "PLR2004", # magic-value-comparison
+    "SLF001",  # private-member-access
+    "S101",    # assert-in-non-test-file — handled via per-file-ignores
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "PLR", "S101", "ARG"]
+
+[tool.ruff.lint.flake8-annotations]
+suppress-none-returning = true
+mypy-init-return = true
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+skip-magic-trailing-comma = true
+
+
