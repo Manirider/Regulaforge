@@ -1,0 +1,68 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: regulaforge-staging
+
+namePrefix: staging-
+
+commonLabels:
+  app.kubernetes.io/environment: staging
+  app.kubernetes.io/version: latest
+
+resources:
+  - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "2Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "4Gi"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: REGULAFORGE_ENVIRONMENT
+          value: staging
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: REGULAFORGE_LOG_LEVEL
+          value: debug
+    target:
+      kind: Deployment
+      name: regulaforge-api
+
+configMapGenerator:
+  - name: regulaforge-api-config
+    behavior: merge
+    literals:
+      - REGULAFORGE_ENVIRONMENT=staging
+      - REGULAFORGE_LOG_LEVEL=debug
+      - REGULAFORGE_CORS_ORIGINS=https://staging.regulaforge.example.com
+      - REGULAFORGE_MONITORING_ENABLED=true
+      - REGULAFORGE_MONITORING_SENTRY_ENABLED=true
+      - REGULAFORGE_MONITORING_SENTRY_TRACES_SAMPLE_RATE=0.5
+
+secretGenerator:
+  - name: regulaforge-api-secret
+    behavior: merge
+    literals:
+      - REGULAFORGE_SECURITY_SECRET_KEY=staging-secret-key-here
+      - REGULAFORGE_DB_PASSWORD=staging-db-password-here
+      - REGULAFORGE_AI_LLM_API_KEY=staging-llm-api-key-here
+      - REGULAFORGE_MONITORING_SENTRY_DSN=https://example@sentry.staging.regulaforge.example.com/1
+
+images:
+  - name: regulaforge/api
+    newTag: latest

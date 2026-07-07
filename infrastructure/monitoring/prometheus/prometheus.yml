@@ -1,0 +1,101 @@
+# =============================================================================
+# RegulaForge - Prometheus Configuration
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+  external_labels:
+    environment: ${ENVIRONMENT:-production}
+    cluster: regulaforge
+
+# Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+      scheme: http
+      timeout: 10s
+      api_version: v2
+
+# Rule files
+rule_files:
+  - /etc/prometheus/alert.rules.yml
+
+# Scrape targets
+scrape_configs:
+  # ─── API Service ──────────────────────────────────────────────────────────
+  - job_name: regulaforge-api
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - api:8000
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: "(.*):.*"
+        replacement: "$1"
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "(python_info|process_.*)"
+        action: drop
+
+  # ─── PostgreSQL ───────────────────────────────────────────────────────────
+  - job_name: postgres
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: db
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  - job_name: redis
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - redis-exporter:9121
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: cache
+
+  # ─── RabbitMQ ─────────────────────────────────────────────────────────────
+  - job_name: rabbitmq
+    scrape_interval: 30s
+    metrics_path: /api/metrics
+    static_configs:
+      - targets:
+          - broker:15692
+
+  # ─── Node Exporter (host metrics) ─────────────────────────────────────────
+  - job_name: node
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - node-exporter:9100
+
+  # ─── MLflow ───────────────────────────────────────────────────────────────
+  - job_name: mlflow
+    scrape_interval: 30s
+    metrics_path: /api/2.0/mlflow/metrics
+    static_configs:
+      - targets:
+          - mlflow:5000
+
+  # ─── Nginx ────────────────────────────────────────────────────────────────
+  - job_name: nginx
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - frontend:80
+    metrics_path: /nginx_status
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: nginx

@@ -1,0 +1,17 @@
+# =============================================================================
+# RegulaForge - Grafana Dashboard Provisioning
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: RegulaForge
+    orgId: 1
+    folder: RegulaForge
+    folderUid: regulaforge
+    type: file
+    disableDeletion: true
+    editable: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

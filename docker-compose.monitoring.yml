@@ -1,0 +1,120 @@
+# =============================================================================
+# RegulaForge - Monitoring Stack
+# Prometheus, Grafana, Loki, Promtail
+# Usage: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+# =============================================================================
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+    tag: "{{.Name}}"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: regulaforge-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - regulaforge-net
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMETHEUS_MEM_LIMIT:-1G}
+          cpus: ${PROMETHEUS_CPU_LIMIT:-1.0}
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: regulaforge-grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?}
+      GF_SECURITY_SECRET_KEY: ${SECRET_KEY:?}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel, grafana-worldmap-panel
+      GF_LOG_LEVEL: ${GRAFANA_LOG_LEVEL:-info}
+    volumes:
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    logging: *default-logging
+    networks:
+      - regulaforge-net
+    deploy:
+      resources:
+        limits:
+          memory: ${GRAFANA_MEM_LIMIT:-512M}
+          cpus: ${GRAFANA_CPU_LIMIT:-1.0}
+
+  loki:
+    image: grafana/loki:latest
+    container_name: regulaforge-loki
+    command:
+      - "-config.file=/etc/loki/loki-config.yml"
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/data/loki
+    logging: *default-logging
+    networks:
+      - regulaforge-net
+    deploy:
+      resources:
+        limits:
+          memory: ${LOKI_MEM_LIMIT:-512M}
+          cpus: ${LOKI_CPU_LIMIT:-1.0}
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: regulaforge-promtail
+    command:
+      - "-config.file=/etc/promtail/promtail-config.yml"
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    logging: *default-logging
+    networks:
+      - regulaforge-net
+    deploy:
+      resources:
+        limits:
+          memory: ${PROMTAIL_MEM_LIMIT:-256M}
+          cpus: ${PROMTAIL_CPU_LIMIT:-0.5}
+
+volumes:
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  loki-data:
+    driver: local
+
+networks:
+  regulaforge-net:
+    external: true

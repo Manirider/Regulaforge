@@ -1,0 +1,39 @@
+# =============================================================================
+# Neo4j Test Environment — lightweight standalone for knowledge graph integration tests
+# =============================================================================
+# Usage:
+#   docker compose -f docker/docker-compose.neo4j.yml up -d
+#   pytest tests/knowledge_graph/test_neo4j_integration.py -v
+#   docker compose -f docker/docker-compose.neo4j.yml down
+# =============================================================================
+
+name: regulaforge-neo4j
+
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: regulaforge-neo4j-test
+    ports:
+      - "7687:7687"   # Bolt
+      - "7474:7474"   # HTTP browser
+    environment:
+      NEO4J_AUTH: neo4j/testpassword
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_dbms_memory_heap_initial__size: 512M
+      NEO4J_dbms_memory_heap_max__size: 1G
+    volumes:
+      - neo4j-test-data:/data
+      - neo4j-test-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p testpassword 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  neo4j-test-data:
+    driver: local
+  neo4j-test-logs:
+    driver: local

@@ -1,0 +1,68 @@
+# =============================================================================
+# RegulaForge - Loki Configuration
+# =============================================================================
+
+auth:
+  enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: info
+
+ingester:
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+  chunk_idle_period: 30m
+  chunk_retain_period: 1m
+  max_chunk_age: 1h
+  chunk_target_size: 1536000  # 1.5MB
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /data/loki/index
+    cache_location: /data/loki/cache
+  filesystem:
+    directory: /data/loki/chunks
+
+compactor:
+  working_directory: /data/loki/compactor
+  shared_store: filesystem
+
+limits_config:
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  ingestion_rate_mb: 10
+  ingestion_burst_size_mb: 20
+  max_query_series: 10000
+  max_query_lookback: 720h  # 30 days
+
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 720h  # 30 days
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /data/loki/rules
+  rule_path: /data/loki/rules-temp
+  alertmanager_url: http://alertmanager:9093
+  ring:
+    kvstore:
+      store: inmemory
+  enable_api: true

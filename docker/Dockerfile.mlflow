@@ -1,0 +1,47 @@
+# =============================================================================
+# RegulaForge - MLflow Tracking Server Dockerfile
+# =============================================================================
+
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MLFLOW_HOME=/opt/mlflow \
+    MLFLOW_PORT=5000 \
+    MLFLOW_ARTIFACT_ROOT=/data/mlflow/artifacts \
+    MLFLOW_BACKEND_STORE_URI=sqlite:////data/mlflow/mlflow.db
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        gosu && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install --no-cache-dir \
+        mlflow[extras]==2.9.0 \
+        boto3 \
+        pymysql \
+        psycopg2-binary \
+        cryptography && \
+    groupadd -r mlflow && \
+    useradd -r -g mlflow -d "$MLFLOW_HOME" -s /sbin/nologin mlflow && \
+    mkdir -p /data/mlflow/artifacts /data/mlflow/backups && \
+    chown -R mlflow:mlflow /data/mlflow
+
+COPY docker/mlflow/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+WORKDIR $MLFLOW_HOME
+
+EXPOSE $MLFLOW_PORT
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:$MLFLOW_PORT/health || exit 1
+
+USER mlflow
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["mlflow", "server", \
+     "--host", "0.0.0.0", \
+     "--port", "5000", \
+     "--default-artifact-root", "/data/mlflow/artifacts", \
+     "--backend-store-uri", "sqlite:////data/mlflow/mlflow.db"]

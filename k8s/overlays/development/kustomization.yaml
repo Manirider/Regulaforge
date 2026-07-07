@@ -1,0 +1,79 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: regulaforge-dev
+
+namePrefix: dev-
+
+commonLabels:
+  app.kubernetes.io/environment: development
+  app.kubernetes.io/version: latest
+
+resources:
+  - ../../base
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: REGULAFORGE_ENVIRONMENT
+          value: development
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: REGULAFORGE_LOG_LEVEL
+          value: debug
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: REGULAFORGE_DEBUG
+          value: "true"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: REGULAFORGE_RELOAD
+          value: "true"
+    target:
+      kind: Deployment
+      name: regulaforge-api
+
+configMapGenerator:
+  - name: regulaforge-api-config
+    behavior: merge
+    literals:
+      - REGULAFORGE_ENVIRONMENT=development
+      - REGULAFORGE_LOG_LEVEL=debug
+      - REGULAFORGE_CORS_ORIGINS=*
+      - REGULAFORGE_MONITORING_ENABLED=false
+      - REGULAFORGE_MONITORING_SENTRY_ENABLED=false
+      - REGULAFORGE_DEBUG=true
+      - REGULAFORGE_RELOAD=true
+
+secretGenerator:
+  - name: regulaforge-api-secret
+    behavior: merge
+    literals:
+      - REGULAFORGE_SECURITY_SECRET_KEY=dev-secret-key-not-secure
+      - REGULAFORGE_DB_PASSWORD=dev-db-password
+      - REGULAFORGE_AI_LLM_API_KEY=dev-llm-key
+      - REGULAFORGE_MONITORING_SENTRY_DSN=
+
+images:
+  - name: regulaforge/api
+    newTag: latest

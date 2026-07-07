@@ -1,0 +1,124 @@
+# =============================================================================
+# RegulaForge - Prometheus Alert Rules
+# =============================================================================
+
+groups:
+  - name: regulaforge-api
+    interval: 30s
+    rules:
+      - alert: APIInstanceDown
+        expr: up{job="regulaforge-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "API instance {{ $labels.instance }} is down"
+          description: "API instance {{ $labels.instance }} has been unreachable for more than 1 minute."
+
+      - alert: APIHighErrorRate
+        expr: |
+          rate(http_requests_total{job="regulaforge-api", status=~"5.."}[5m])
+          /
+          rate(http_requests_total{job="regulaforge-api"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "API error rate exceeds 5%"
+          description: "Error rate on {{ $labels.instance }} is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      - alert: APIHighLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="regulaforge-api"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "API p95 latency exceeds 2s"
+          description: "p95 latency on {{ $labels.instance }} is {{ $value }}s over the last 5 minutes."
+
+      - alert: APIHighRequestRate
+        expr: rate(http_requests_total{job="regulaforge-api"}[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "API request rate exceeds 1000 req/s"
+          description: "Request rate on {{ $labels.instance }} is {{ $value | humanize }} req/s."
+
+  - name: infrastructure
+    interval: 30s
+    rules:
+      - alert: DatabaseDown
+        expr: pg_up{job="postgres"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "PostgreSQL instance {{ $labels.instance }} is down"
+          description: "Database connection lost."
+
+      - alert: DatabaseConnectionsHigh
+        expr: pg_stat_activity_count{job="postgres"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "PostgreSQL connection count high"
+          description: "Connection count is {{ $value }} (threshold: 100)."
+
+      - alert: CacheDown
+        expr: redis_up{job="redis"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Redis instance {{ $labels.instance }} is down"
+          description: "Cache service unreachable."
+
+      - alert: BrokerDown
+        expr: rabbitmq_queue_messages{job="rabbitmq"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "RabbitMQ service is down"
+          description: "Message broker unreachable."
+
+      - alert: BrokerQueueDepth
+        expr: rabbitmq_queue_messages{job="rabbitmq"} > 10000
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "RabbitMQ queue depth high"
+          description: "Queue {{ $labels.queue }} has {{ $value }} messages."
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{job="node", mountpoint="/"} / node_filesystem_size_bytes{job="node", mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "Disk space below 10%"
+          description: "Available disk space is {{ $value | humanizePercentage }}."
+
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Memory usage above 90%"
+          description: "Memory usage is {{ $value | humanizePercentage }}."

@@ -1,0 +1,123 @@
+# =============================================================================
+# RegulaForge - ML Stack Docker Compose
+# MLflow, model serving, and experiment tracking
+# Usage: docker compose -f docker/docker-compose.ml.yml up -d
+# =============================================================================
+
+name: regulaforge-ml
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ─── MLflow Tracking Server ────────────────────────────────────────────
+  mlflow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mlflow
+    image: regulaforge/mlflow:latest
+    container_name: regulaforge-mlflow
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_TRACKING_USERNAME: admin
+      MLFLOW_TRACKING_PASSWORD: ${MLFLOW_TRACKING_PASSWORD:-mlflow}
+      MLFLOW_BACKEND_STORE_URI: postgresql+psycopg2://regulaforge:${DB_PASSWORD:?}@db:5432/regulaforge_mlflow
+      MLFLOW_ARTIFACT_ROOT: s3://regulaforge-mlflow/artifacts
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    depends_on:
+      ml-db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes:
+      - mlflow_data:/data/mlflow
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    networks:
+      - regulaforge-ml
+
+  # ─── MLflow Database ────────────────────────────────────────────────────
+  ml-db:
+    image: postgres:16-alpine
+    container_name: regulaforge-ml-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: regulaforge_mlflow
+      POSTGRES_USER: regulaforge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-regulaforge}
+    volumes:
+      - ml_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U regulaforge -d regulaforge_mlflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+    networks:
+      - regulaforge-ml
+
+  # ─── MinIO (S3-compatible artifact storage) ────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: regulaforge-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+    networks:
+      - regulaforge-ml
+
+  # ─── Jupyter Notebook (ad-hoc ML work) ─────────────────────────────────
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    container_name: regulaforge-jupyter
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-regulaforge}
+    volumes:
+      - ../ml:/home/jovyan/work:ro
+      - jupyter_data:/home/jovyan
+    logging: *default-logging
+    networks:
+      - regulaforge-ml
+
+volumes:
+  mlflow_data:
+    driver: local
+  ml_postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  jupyter_data:
+    driver: local
+
+networks:
+  regulaforge-ml:
+    name: regulaforge-ml
+    driver: bridge
