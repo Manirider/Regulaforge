@@ -1,0 +1,271 @@
+name: CD Pipeline
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: Docker image tag to deploy
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  K8S_BASE_DIR: k8s
+
+jobs:
+  build-and-push:
+    name: Build & Push Multi-Arch Images
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        service: [api, frontend]
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      api_image_digest: ${{ steps.build-api.outputs.digest }}
+      frontend_image_digest: ${{ steps.build-frontend.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=,suffix=,format=short
+
+      - name: Build and push multi-arch image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.${{ matrix.service == 'frontend' && 'frontend' || 'Dockerfile' }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  update-manifests:
+    name: Update Kubernetes Manifests
+    runs-on: ubuntu-22.04
+    needs: [build-and-push]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update image tags in kustomization
+        run: |
+          NEW_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          for env in production staging development; do
+            FILE="k8s/overlays/$env/kustomization.yaml"
+            if [ -f "$FILE" ]; then
+              sed -i "s|newTag:.*|newTag: $NEW_TAG|g" "$FILE"
+            fi
+          done
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: "chore: update image tags to ${{ needs.build-and-push.outputs.image_tag }}"
+          title: "Update image tags to ${{ needs.build-and-push.outputs.image_tag }}"
+          body: |
+            Automated manifest update triggered by CD pipeline.
+
+            **API Image:** ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/api
+            **Frontend Image:** ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/frontend
+            **Tag:** ${{ needs.build-and-push.outputs.image_tag }}
+
+            **Digests:**
+            - API: ${{ needs.build-and-push.outputs.api_image_digest }}
+            - Frontend: ${{ needs.build-and-push.outputs.frontend_image_digest }}
+          branch: automation/update-image-${{ needs.build-and-push.outputs.image_tag }}
+          delete-branch: true
+          labels: automation
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-22.04
+    needs: [build-and-push]
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://staging.regulaforge.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy with Kustomize
+        run: |
+          kubectl apply -k k8s/overlays/staging
+
+      - name: Verify deployment rollout
+        run: |
+          kubectl -n regulaforge-staging rollout status deployment/staging-regulaforge-api \
+            --timeout=300s
+          kubectl -n regulaforge-staging rollout status deployment/staging-regulaforge-frontend \
+            --timeout=300s
+
+      - name: Notify deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'success',
+              context: 'Deploy to Staging',
+              description: 'Deployed successfully',
+              target_url: 'https://staging.regulaforge.example.com'
+            });
+
+  integration-test:
+    name: E2E Integration Tests
+    runs-on: ubuntu-22.04
+    needs: [deploy-staging]
+    timeout-minutes: 20
+    environment:
+      name: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install --no-cache-dir "poetry==1.7.1"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --only main
+
+      - name: Run E2E tests
+        run: |
+          poetry run pytest tests/e2e/ \
+            --base-url=https://staging.regulaforge.example.com \
+            --timeout=180 \
+            -v \
+            --junitxml=report-e2e.xml
+        env:
+          REGULAFORGE_API_KEY: ${{ secrets.STAGING_API_KEY }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-report
+          path: report-e2e.xml
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-22.04
+    needs: [integration-test, update-manifests]
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://regulaforge.example.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy to production
+        run: |
+          kubectl apply -k k8s/overlays/production
+
+      - name: Verify rollout
+        run: |
+          kubectl -n regulaforge-prod rollout status deployment/prod-regulaforge-api \
+            --timeout=300s
+          kubectl -n regulaforge-prod rollout status deployment/prod-regulaforge-frontend \
+            --timeout=300s
+
+      - name: Smoke test production
+        run: |
+          BASE_URL="https://regulaforge.example.com"
+          for i in $(seq 1 10); do
+            # Test API health
+            API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/health")
+            # Test frontend serves HTML
+            FE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/")
+            if [ "$API_STATUS" = "200" ] && [ "$FE_STATUS" = "200" ]; then
+              echo "Smoke tests passed (attempt $i)"
+              break
+            fi
+            if [ "$i" = "10" ]; then
+              echo "Smoke tests failed after 10 attempts"
+              echo "API status: $API_STATUS, Frontend status: $FE_STATUS"
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Notify production deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'success',
+              context: 'Deploy to Production',
+              description: 'Deployed version ${{ needs.build-and-push.outputs.image_tag }}',
+              target_url: 'https://regulaforge.example.com'
+            });
