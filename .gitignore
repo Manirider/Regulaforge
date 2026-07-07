@@ -1,0 +1,80 @@
+# =============================================================================
+# RegulaForge - .gitignore
+# =============================================================================
+
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+*.egg
+*.whl
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+*.coverage
+htmlcov/
+.pytest_cache/
+
+# ─── Node / Frontend ────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.iml
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Secrets ─────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.monitoring
+.secrets/
+*.key
+*.pem
+*.cert
+!scripts/generate-secrets.sh
+!scripts/generate-secrets.ps1
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+/logs/
+
+# ─── Terraform ───────────────────────────────────────────────────────────────
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate*
+infrastructure/terraform/*.tfstate.*.backup
+infrastructure/terraform/.terraform.lock.hcl
+
+# ─── Build Artifacts ─────────────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.whl
+
+# ─── MLflow ──────────────────────────────────────────────────────────────────
+mlruns/
+mlartifacts/
+
+# ─── Jupyter ─────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
