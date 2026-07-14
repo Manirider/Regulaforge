@@ -14,17 +14,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from prometheus_client import make_asgi_app
 
 from regulaforge.agents.interfaces.api import create_agents_router
-from regulaforge.modules.auth.interfaces import create_auth_router as create_module_auth_router
-from regulaforge.modules.authorization.interfaces import create_authorization_router
-from regulaforge.modules.users.interfaces import create_users_router
-from regulaforge.modules.contracts.interfaces import create_contracts_router
-from regulaforge.modules.regulations.interfaces import create_regulations_router
-from regulaforge.modules.knowledge_graph.interfaces import create_knowledge_graph_router
-from regulaforge.modules.reports.interfaces import create_reports_router
-from regulaforge.modules.notifications.interfaces import create_notifications_router
-from regulaforge.modules.audit.interfaces import create_audit_router
-from regulaforge.modules.settings.interfaces import create_settings_router
-from regulaforge.modules.websocket import create_websocket_router
+
 from regulaforge.audit.interfaces.audit_middleware import add_audit_middleware
 from regulaforge.config.constants import (
     API_CONTACT_EMAIL,
@@ -190,39 +180,7 @@ def create_app() -> FastAPI:
 
     app.include_router(ml_router, prefix=API_V1_PREFIX)
 
-    # Module routers (DDD-layered modules)
-    module_auth_router = create_module_auth_router()
-    app.include_router(module_auth_router, prefix=API_V1_PREFIX)
 
-    authz_router = create_authorization_router()
-    app.include_router(authz_router, prefix=API_V1_PREFIX)
-
-    users_router = create_users_router()
-    app.include_router(users_router, prefix=API_V1_PREFIX)
-
-    contracts_router = create_contracts_router()
-    app.include_router(contracts_router, prefix=API_V1_PREFIX)
-
-    regulations_module_router = create_regulations_router()
-    app.include_router(regulations_module_router, prefix=API_V1_PREFIX)
-
-    kg_module_router = create_knowledge_graph_router()
-    app.include_router(kg_module_router, prefix=API_V1_PREFIX)
-
-    reports_router = create_reports_router()
-    app.include_router(reports_router, prefix=API_V1_PREFIX)
-
-    notifications_router = create_notifications_router()
-    app.include_router(notifications_router, prefix=API_V1_PREFIX)
-
-    audit_router = create_audit_router()
-    app.include_router(audit_router, prefix=API_V1_PREFIX)
-
-    settings_router = create_settings_router()
-    app.include_router(settings_router, prefix=API_V1_PREFIX)
-
-    ws_router = create_websocket_router()
-    app.include_router(ws_router)
 
     # Prometheus metrics endpoint (separate from dashboard KPI at /api/v1/metrics)
     metrics_app = make_asgi_app()
